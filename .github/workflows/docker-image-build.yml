@@ -8,8 +8,6 @@ on:
     paths-ignore:
       - README.md
       - LICENSE
-      - .github/**
-      - "!.github/workflows/**"
     # Tag pushes skipped for now; main/dev already publish version + sha tags.
 
 env:

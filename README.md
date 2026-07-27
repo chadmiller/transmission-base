@@ -53,6 +53,10 @@ not look like a release:
 | `TRANSMISSION_VERSION` | `4.1.3` | Transmission release built from the official source tarball |
 | `TRANSMISSION_SHA256` | `ce7d2d8b…` | Expected SHA-256 of that tarball (bump together with the version) |
 
+`UBUNTU_VERSION` selects the Ubuntu tag, but the runtime library package
+names in the Dockerfile are chosen for the default LTS (currently 26.04).
+Changing to another Ubuntu major may require updating those packages.
+
 ## Local build
 
 ```bash
@@ -70,7 +74,8 @@ docker build \
   .
 ```
 
-Multi-arch (requires Buildx + QEMU):
+Multi-arch with Buildx + QEMU. Multi-platform builds are not loaded into the
+local Docker engine; `--push` publishes them to a registry (CI does this):
 
 ```bash
 docker buildx build \
@@ -79,8 +84,10 @@ docker buildx build \
   --build-arg TRANSMISSION_VERSION=4.1.3 \
   --build-arg TRANSMISSION_SHA256=ce7d2d8b101f7eb54bc3cf0bc55f52f7ebd4a25fa48e00bdca9a7e0fc02617da \
   -t haugene/transmission-base:4.1.3-ubuntu26.04 \
+  --push \
   .
 ```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
