@@ -1,0 +1,89 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths-ignore:
+      - README.md
+      - LICENSE
+      - .github/**
+      - "!.github/workflows/**"
+    # Tag pushes skipped for now; main/dev already publish version + sha tags.
+
+env:
+  IMAGE_NAME: haugene/transmission-base
+  # Keep these in sync with the Dockerfile ARG defaults.
+  TRANSMISSION_VERSION: "4.1.3"
+  TRANSMISSION_SHA256: "ce7d2d8b101f7eb54bc3cf0bc55f52f7ebd4a25fa48e00bdca9a7e0fc02617da"
+  UBUNTU_VERSION: "26.04"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Build a floating version tag plus an immutable per-build tag.
+      # Dev branch publishes a separate channel so unfinished work is not
+      # mistaken for a release.
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          BASE_TAG="${TRANSMISSION_VERSION}-ubuntu${UBUNTU_VERSION}"
+
+          TAGS=()
+
+          if [[ "${GITHUB_REF}" == "refs/heads/dev" ]]; then
+            # Dev channel: branch alias + versioned floating + immutable.
+            TAGS+=("${IMAGE_NAME}:dev")
+            TAGS+=("${IMAGE_NAME}:${BASE_TAG}-dev")
+            TAGS+=("${IMAGE_NAME}:${BASE_TAG}-dev-${SHORT_SHA}")
+          else
+            # main: floating + immutable.
+            TAGS+=("${IMAGE_NAME}:${BASE_TAG}")
+            TAGS+=("${IMAGE_NAME}:${BASE_TAG}-${SHORT_SHA}")
+          fi
+
+          # Join as a newline-separated list for docker/build-push-action.
+          {
+            echo "tags<<EOF"
+            printf "%s\n" "${TAGS[@]}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+          echo "Floating / channel tags:"
+          printf "  - %s\n" "${TAGS[@]}"
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            TRANSMISSION_VERSION=${{ env.TRANSMISSION_VERSION }}
+            TRANSMISSION_SHA256=${{ env.TRANSMISSION_SHA256 }}
+            UBUNTU_VERSION=${{ env.UBUNTU_VERSION }}
+          cache-from: type=gha,scope=${{ github.workflow }}
+          cache-to: type=gha,mode=max,scope=${{ github.workflow }}
